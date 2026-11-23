@@ -6,6 +6,7 @@ export type TaskType =
   | 'file_download'
   | 'sleep'
   | 'process_tree'
+  | 'coff_loader'
 
 export interface AgentInfo {
   user: string
@@ -31,6 +32,7 @@ export interface Task {
   type: TaskType
   command?: string
   payload_id?: string
+  coff_args?: string[]
 }
 
 export interface ProcessInfo {

@@ -22,10 +22,11 @@ const TASK_TYPES: {
   { value: 'shell', label: 'Shell Command' },
   { value: 'process', label: 'Process Tree' },
   { value: 'payload', label: 'Payload' },
-  { value: 'execute-assembly', label: 'Execute Assembly' },
-  { value: 'download', label: 'Download File' },
-  { value: 'upload', label: 'Upload File' },
+  { value: 'execute_assembly', label: 'Execute Assembly' },
+  { value: 'file_download', label: 'Download File' },
+  { value: 'file_upload', label: 'Upload File' },
   { value: 'sleep', label: 'Sleep' },
+  { value: 'coff_loader', label: 'coff_loader' },
 ]
 
 const QUICK = [
@@ -41,7 +42,7 @@ function timeAgo(iso: string): string {
   if (!iso) return '—'
 
   const s = Math.floor(
-    (Date.now() - new Date(iso).getTime()) / 1000,
+      (Date.now() - new Date(iso).getTime()) / 1000,
   )
 
   if (s < 5) return 'now'
@@ -52,7 +53,7 @@ function timeAgo(iso: string): string {
 }
 
 function buildProcessTree(
-  processes: ProcessInfo[],
+    processes: ProcessInfo[],
 ): ProcessNode[] {
   const nodes = new Map<number, ProcessNode>()
 
@@ -77,7 +78,7 @@ function buildProcessTree(
 
   const sortTree = (items: ProcessNode[]) => {
     items.sort((a, b) =>
-      a.name.localeCompare(b.name),
+        a.name.localeCompare(b.name),
     )
 
     for (const item of items) {
@@ -91,7 +92,7 @@ function buildProcessTree(
 }
 
 function parseProcessOutput(
-  output: string,
+    output: string,
 ): ProcessNode[] | null {
   try {
     const parsed = JSON.parse(output)
@@ -101,35 +102,35 @@ function parseProcessOutput(
     }
 
     const processes: ProcessInfo[] = parsed
-      .map((item): ProcessInfo | null => {
-        const pid = Number(
-          item.ProcessId ?? item.pid,
+        .map((item): ProcessInfo | null => {
+          const pid = Number(
+              item.ProcessId ?? item.pid,
+          )
+
+          const ppid = Number(
+              item.ParentProcessId ?? item.ppid,
+          )
+
+          const name = String(
+              item.Name ?? item.name ?? 'unknown',
+          )
+
+          if (!Number.isFinite(pid)) {
+            return null
+          }
+
+          return {
+            pid,
+            ppid: Number.isFinite(ppid)
+                ? ppid
+                : 0,
+            name,
+          }
+        })
+        .filter(
+            (item): item is ProcessInfo =>
+                item !== null,
         )
-
-        const ppid = Number(
-          item.ParentProcessId ?? item.ppid,
-        )
-
-        const name = String(
-          item.Name ?? item.name ?? 'unknown',
-        )
-
-        if (!Number.isFinite(pid)) {
-          return null
-        }
-
-        return {
-          pid,
-          ppid: Number.isFinite(ppid)
-            ? ppid
-            : 0,
-          name,
-        }
-      })
-      .filter(
-        (item): item is ProcessInfo =>
-          item !== null,
-      )
 
     return buildProcessTree(processes)
   } catch {
@@ -138,14 +139,14 @@ function parseProcessOutput(
 }
 
 function ProcessTree({
-  nodes,
-}: {
+                       nodes,
+                     }: {
   nodes: ProcessNode[]
 }) {
   const [expanded, setExpanded] =
-    useState<Set<number>>(
-      () => new Set(),
-    )
+      useState<Set<number>>(
+          () => new Set(),
+      )
 
   useEffect(() => {
     const initial = new Set<number>()
@@ -172,160 +173,167 @@ function ProcessTree({
   }
 
   function renderNode(
-    node: ProcessNode,
-    depth: number,
+      node: ProcessNode,
+      depth: number,
   ): React.ReactNode {
     const hasChildren =
-      node.children.length > 0
+        node.children.length > 0
 
     const isExpanded =
-      expanded.has(node.pid)
+        expanded.has(node.pid)
 
     return (
-      <div
-        key={`${node.pid}-${node.ppid}`}
-        style={{
-          marginLeft: depth * 20,
-        }}
-      >
         <div
-          className="process-row"
-          onClick={() => {
-            if (hasChildren) {
-              toggle(node.pid)
-            }
-          }}
-          style={{
-            cursor: hasChildren
-              ? 'pointer'
-              : 'default',
-          }}
+            key={`${node.pid}-${node.ppid}`}
+            style={{
+              marginLeft: depth * 20,
+            }}
         >
+          <div
+              className="process-row"
+              onClick={() => {
+                if (hasChildren) {
+                  toggle(node.pid)
+                }
+              }}
+              style={{
+                cursor: hasChildren
+                    ? 'pointer'
+                    : 'default',
+              }}
+          >
           <span className="process-arrow">
             {hasChildren
-              ? isExpanded
-                ? '▼'
-                : '▶'
-              : '•'}
+                ? isExpanded
+                    ? '▼'
+                    : '▶'
+                : '•'}
           </span>
 
-          <span className="process-name">
+            <span className="process-name">
             {node.name}
           </span>
 
-          <span className="process-pid">
+            <span className="process-pid">
             PID {node.pid}
           </span>
-        </div>
+          </div>
 
-        {hasChildren &&
-          isExpanded &&
-          node.children.map((child) =>
-            renderNode(
-              child,
-              depth + 1,
-            ),
-          )}
-      </div>
+          {hasChildren &&
+              isExpanded &&
+              node.children.map((child) =>
+                  renderNode(
+                      child,
+                      depth + 1,
+                  ),
+              )}
+        </div>
     )
   }
 
   return (
-    <div className="process-tree">
-      {nodes.map((node) =>
-        renderNode(node, 0),
-      )}
-    </div>
+      <div className="process-tree">
+        {nodes.map((node) =>
+            renderNode(node, 0),
+        )}
+      </div>
   )
 }
 
 export default function App() {
   const [agents, setAgents] =
-    useState<Agent[]>([])
+      useState<Agent[]>([])
 
   const [selected, setSelected] =
-    useState<string | null>(null)
+      useState<string | null>(null)
 
   const [results, setResults] =
-    useState<Result[]>([])
+      useState<Result[]>([])
 
   const [taskType, setTaskType] =
-    useState<TaskType>('shell')
+      useState<TaskType>('shell')
 
   const [command, setCommand] =
-    useState('')
+      useState('')
 
   const [payloadId, setPayloadId] =
-    useState('')
+      useState('')
+
+  // coff_loader inputs
+  const [coffUrl, setCoffUrl] =
+      useState('')
+
+  const [coffArgs, setCoffArgs] =
+      useState('')
 
   const [online, setOnline] =
-    useState(false)
+      useState(false)
 
   const [sending, setSending] =
-    useState(false)
+      useState(false)
 
   const [toast, setToast] =
-    useState<string | null>(null)
+      useState<string | null>(null)
 
   const consoleRef =
-    useRef<HTMLDivElement>(null)
+      useRef<HTMLDivElement>(null)
 
   const loadAgents = useCallback(
-    async () => {
-      try {
-        setAgents(
-          await api.agents(),
-        )
-
-        setOnline(true)
-      } catch {
-        setOnline(false)
-      }
-    },
-    [],
-  )
-
-  const loadResults =
-    useCallback(
-      async (id: string | null) => {
-        if (!id) return
-
+      async () => {
         try {
-          setResults(
-            await api.results(id),
+          setAgents(
+              await api.agents(),
           )
+
+          setOnline(true)
         } catch {
-          // ignore polling errors
+          setOnline(false)
         }
       },
       [],
-    )
+  )
+
+  const loadResults =
+      useCallback(
+          async (id: string | null) => {
+            if (!id) return
+
+            try {
+              setResults(
+                  await api.results(id),
+              )
+            } catch {
+              // ignore polling errors
+            }
+          },
+          [],
+      )
 
   useEffect(() => {
     loadAgents()
 
     const timer =
-      setInterval(
-        loadAgents,
-        3000,
-      )
+        setInterval(
+            loadAgents,
+            3000,
+        )
 
     return () =>
-      clearInterval(timer)
+        clearInterval(timer)
   }, [loadAgents])
 
   useEffect(() => {
     loadResults(selected)
 
     const timer =
-      setInterval(
-        () =>
-          loadResults(selected),
-        3000,
-      )
+        setInterval(
+            () =>
+                loadResults(selected),
+            3000,
+        )
 
     return () =>
-      clearInterval(timer)
+        clearInterval(timer)
   }, [
     selected,
     loadResults,
@@ -333,11 +341,11 @@ export default function App() {
 
   useEffect(() => {
     if (
-      selected &&
-      !agents.some(
-        (a) =>
-          a.id === selected,
-      )
+        selected &&
+        !agents.some(
+            (a) =>
+                a.id === selected,
+        )
     ) {
       setSelected(null)
     }
@@ -352,38 +360,40 @@ export default function App() {
    */
   useEffect(() => {
     const el =
-      consoleRef.current
+        consoleRef.current
 
     if (!el) return
 
     const threshold = 80
 
     const nearBottom =
-      el.scrollHeight -
+        el.scrollHeight -
         el.scrollTop -
         el.clientHeight <
-      threshold
+        threshold
 
     if (nearBottom) {
       el.scrollTop =
-        el.scrollHeight
+          el.scrollHeight
     }
   }, [results])
 
   function showToast(
-    message: string,
+      message: string,
   ) {
     setToast(message)
 
     setTimeout(
-      () => setToast(null),
-      2000,
+        () => setToast(null),
+        2000,
     )
   }
 
   function resetInputs() {
     setCommand('')
     setPayloadId('')
+    setCoffUrl('')
+    setCoffArgs('')
   }
 
   function buildTask() {
@@ -395,7 +405,7 @@ export default function App() {
       return {
         type: 'shell' as const,
         command:
-          command.trim(),
+            command.trim(),
       }
     }
 
@@ -407,13 +417,13 @@ export default function App() {
       return {
         type: 'payload' as const,
         payload_id:
-          payloadId.trim(),
+            payloadId.trim(),
       }
     }
 
     if (
-      taskType ===
-      'execute-assembly'
+        taskType ===
+        'execute_assembly'
     ) {
       if (!payloadId.trim()) {
         return null
@@ -421,15 +431,27 @@ export default function App() {
 
       return {
         type:
-          'execute_assembly' as const,
+            'execute_assembly' as const,
         payload_id:
-          payloadId.trim(),
+            payloadId.trim(),
+      }
+    }
+
+    if (taskType === 'coff_loader') {
+      if (!coffUrl.trim()) return null
+      // split on whitespace, keep it simple; use a better parser if args contain spaces
+      const extra = coffArgs.trim()
+          ? coffArgs.trim().split(/\s+/)
+          : []
+      return {
+        type: 'coff_loader' as const,
+        coff_args: [coffUrl.trim(), ...extra],
       }
     }
 
     if (
-      taskType === 'download' ||
-      taskType === 'upload'
+        taskType === 'file_download' ||
+        taskType === 'file_upload'
     ) {
       if (!payloadId.trim()) {
         return null
@@ -437,12 +459,12 @@ export default function App() {
 
       return {
         type:
-          taskType ===
-          'download'
-            ? 'file_download'
-            : 'file_upload',
+            taskType ===
+            'file_download'
+                ? 'file_download'
+                : 'file_upload',
         payload_id:
-          payloadId.trim(),
+            payloadId.trim(),
       }
     }
 
@@ -455,16 +477,14 @@ export default function App() {
     if (!selected) return
 
     const task =
-      buildTask()
+        buildTask()
 
     if (!task) {
       showToast(
-        taskType ===
-          'shell'
-          ? 'enter a command'
-          : 'enter a payload id',
+          taskType === 'shell' ? 'enter a command'
+              : taskType === 'coff_loader' ? 'enter a coff url and args'
+                  : 'enter a payload id'
       )
-
       return
     }
 
@@ -472,22 +492,22 @@ export default function App() {
 
     try {
       await api.queue(
-        selected,
-        task,
+          selected,
+          task,
       )
 
       resetInputs()
 
       showToast(
-        `${taskType} task queued`,
+          `${taskType} task queued`,
       )
     } catch (e) {
       showToast(
-        `error: ${
-          e instanceof Error
-            ? e.message
-            : 'unknown'
-        }`,
+          `error: ${
+              e instanceof Error
+                  ? e.message
+                  : 'unknown'
+          }`,
       )
     } finally {
       setSending(false)
@@ -495,414 +515,436 @@ export default function App() {
   }
 
   const agent =
-    agents.find(
-      (a) =>
-        a.id === selected,
-    )
+      agents.find(
+          (a) =>
+              a.id === selected,
+      )
 
   const isShell =
-    taskType === 'shell'
+      taskType === 'shell'
 
   const isPayload =
-    taskType === 'payload' ||
-    taskType ===
-      'execute-assembly' ||
-    taskType === 'download' ||
-    taskType === 'upload'
+      taskType === 'payload' ||
+      taskType ===
+      'execute_assembly' ||
+      taskType === 'file_download' ||
+      taskType === 'file_upload'
 
   return (
-    <div className="app">
-      <header>
-        <div className="brand">
-          C2 PANEL
-        </div>
+      <div className="app">
+        <header>
+          <div className="brand">
+            C2 PANEL
+          </div>
 
-        <div
-          className={`status ${
-            online
-              ? 'on'
-              : 'off'
-          }`}
-        >
-          <span className="dot" />
+          <div
+              className={`status ${
+                  online
+                      ? 'on'
+                      : 'off'
+              }`}
+          >
+            <span className="dot" />
 
-          {online
-            ? 'connected'
-            : 'disconnected'}
-        </div>
-      </header>
+            {online
+                ? 'connected'
+                : 'disconnected'}
+          </div>
+        </header>
 
-      <main>
-        <aside>
-          <h2>
-            Agents ({agents.length})
-          </h2>
+        <main>
+          <aside>
+            <h2>
+              Agents ({agents.length})
+            </h2>
 
-          <div className="agent-list">
-            {agents.length ===
-              0 && (
-              <div className="empty">
-                no agents registered
-              </div>
-            )}
+            <div className="agent-list">
+              {agents.length ===
+                  0 && (
+                      <div className="empty">
+                        no agents registered
+                      </div>
+                  )}
 
-            {agents.map(
-              (a) => (
-                <div
-                  key={a.id}
-                  className={`agent ${
-                    a.id ===
-                    selected
-                      ? 'active'
-                      : ''
-                  }`}
-                  onClick={() =>
-                    setSelected(
-                      a.id,
-                    )
-                  }
-                >
-                  <div className="agent-top">
+              {agents.map(
+                  (a) => (
+                      <div
+                          key={a.id}
+                          className={`agent ${
+                              a.id ===
+                              selected
+                                  ? 'active'
+                                  : ''
+                          }`}
+                          onClick={() =>
+                              setSelected(
+                                  a.id,
+                              )
+                          }
+                      >
+                        <div className="agent-top">
                     <span className="agent-user">
                       {
                         a
-                          .info
-                          .user
+                            .info
+                            .user
                       }
                       @
                       {
                         a
-                          .info
-                          .host
+                            .info
+                            .host
                       }
                     </span>
 
-                    <span className="agent-id">
+                          <span className="agent-id">
                       {a.id.slice(
-                        0,
-                        8,
+                          0,
+                          8,
                       )}
                     </span>
-                  </div>
+                        </div>
 
-                  <div className="agent-meta">
+                        <div className="agent-meta">
                     <span>
                       {
                         a
-                          .info
-                          .os
+                            .info
+                            .os
                       }
                     </span>
 
-                    <span className="lastseen">
+                          <span className="lastseen">
                       {timeAgo(
-                        a.last_seen,
+                          a.last_seen,
                       )}
                     </span>
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
-        </aside>
-
-        <section className="workspace">
-          {!selected ? (
-            <div className="placeholder">
-              Select an agent to open
-              its console
+                        </div>
+                      </div>
+                  ),
+              )}
             </div>
-          ) : (
-            <>
-              <div className="console-head">
+          </aside>
+
+          <section className="workspace">
+            {!selected ? (
+                <div className="placeholder">
+                  Select an agent to open
+                  its console
+                </div>
+            ) : (
+                <>
+                  <div className="console-head">
                 <span className="target">
                   {
                     agent?.info
-                      .user
+                        .user
                   }
                   @
                   {
                     agent?.info
-                      .host
+                        .host
                   }
                 </span>
 
-                <span className="target-id">
+                    <span className="target-id">
                   {selected}
                 </span>
-              </div>
-
-              <div
-                className="console"
-                ref={consoleRef}
-              >
-                {results.length ===
-                  0 && (
-                  <div className="console-empty">
-                    no results yet —
-                    queue a task below
                   </div>
-                )}
 
-                {results.map(
-                  (r) => {
-                    const tree =
-                      parseProcessOutput(
-                        r.output,
-                      )
+                  <div
+                      className="console"
+                      ref={consoleRef}
+                  >
+                    {results.length ===
+                        0 && (
+                            <div className="console-empty">
+                              no results yet —
+                              queue a task below
+                            </div>
+                        )}
 
-                    const isProcessResult =
-                      taskType ===
-                        'process' ||
-                      r.command ===
-                        'process tree'
+                    {results.map(
+                        (r) => {
+                          const tree =
+                              parseProcessOutput(
+                                  r.output,
+                              )
 
-                    return (
-                      <div
-                        key={r.id}
-                        className="entry"
-                      >
-                        <div className="cmdline">
+                          const isProcessResult =
+                              taskType ===
+                              'process' ||
+                              r.command ===
+                              'process tree'
+
+                          return (
+                              <div
+                                  key={r.id}
+                                  className="entry"
+                              >
+                                <div className="cmdline">
                           <span className="prompt">
                             ›
                           </span>{' '}
 
-                          {r.command ||
-                            '(no command)'}
+                                  {r.command ||
+                                      '(no command)'}
 
-                          <span className="time">
+                                  <span className="time">
                             {new Date(
-                              r.created_at,
+                                r.created_at,
                             ).toLocaleTimeString()}
                           </span>
-                        </div>
+                                </div>
 
-                        {isProcessResult &&
-                        tree ? (
-                          <ProcessTree
-                            nodes={tree}
-                          />
-                        ) : r.output ? (
-                          <pre className="output">
+                                {isProcessResult &&
+                                tree ? (
+                                    <ProcessTree
+                                        nodes={tree}
+                                    />
+                                ) : r.output ? (
+                                    <pre className="output">
                             {
                               r.output
                             }
                           </pre>
-                        ) : (
-                          <div className="running">
-                            executing…
-                          </div>
-                        )}
-                      </div>
-                    )
-                  },
-                )}
-              </div>
+                                ) : (
+                                    <div className="running">
+                                      executing…
+                                    </div>
+                                )}
+                              </div>
+                          )
+                        },
+                    )}
+                  </div>
 
               {isShell && (
-                <div className="quick">
-                  {QUICK.map(
-                    (q) => (
-                      <button
-                        key={q}
-                        onClick={() =>
-                          setCommand(
-                            q,
-                          )
-                        }
-                      >
-                        {q}
-                      </button>
-                    ),
-                  )}
-                </div>
+                  <div className="quick">
+                    {QUICK.map(
+                        (q) => (
+                            <button
+                                key={q}
+                                onClick={() =>
+                                    setCommand(
+                                        q,
+                                    )
+                                }
+                            >
+                              {q}
+                            </button>
+                        ),
+                    )}
+                  </div>
               )}
 
-              <div className="task-panel">
-                <div className="task-type">
-                  <label>
-                    Task Type
-                  </label>
+                  <div className="task-panel">
+                    <div className="task-type">
+                      <label>
+                        Task Type
+                      </label>
 
-                  <select
-                    value={
-                      taskType
-                    }
-                    onChange={(
-                      e,
-                    ) => {
-                      setTaskType(
-                        e.target
-                          .value as TaskType,
-                      )
-
-                      resetInputs()
-                    }}
-                  >
-                    {TASK_TYPES.map(
-                      (
-                        type,
-                      ) => (
-                        <option
-                          key={
-                            type.value
-                          }
+                      <select
                           value={
-                            type.value
+                            taskType
                           }
-                        >
-                          {
-                            type.label
-                          }
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </div>
+                          onChange={(
+                              e,
+                          ) => {
+                            setTaskType(
+                                e.target
+                                    .value as TaskType,
+                            )
 
-                {isShell && (
-                  <form
-                    className="composer"
-                    onSubmit={(
-                      e,
-                    ) => {
-                      e.preventDefault()
-                      sendTask()
-                    }}
-                  >
+                            resetInputs()
+                          }}
+                      >
+                        {TASK_TYPES.map(
+                            (
+                                type,
+                            ) => (
+                                <option
+                                    key={
+                                      type.value
+                                    }
+                                    value={
+                                      type.value
+                                    }
+                                >
+                                  {
+                                    type.label
+                                  }
+                                </option>
+                            ),
+                        )}
+                      </select>
+                    </div>
+
+                    {isShell && (
+                        <form
+                            className="composer"
+                            onSubmit={(
+                                e,
+                            ) => {
+                              e.preventDefault()
+                              sendTask()
+                            }}
+                        >
                     <span className="prompt">
                       ›
                     </span>
 
-                    <input
-                      value={
-                        command
-                      }
-                      onChange={(
-                        e,
-                      ) =>
-                        setCommand(
-                          e.target
-                            .value,
-                        )
-                      }
-                      placeholder="command to execute..."
-                    />
+                          <input
+                              value={
+                                command
+                              }
+                              onChange={(
+                                  e,
+                              ) =>
+                                  setCommand(
+                                      e.target
+                                          .value,
+                                  )
+                              }
+                              placeholder="command to execute..."
+                          />
 
-                    <button
-                      type="submit"
-                      disabled={
-                        sending ||
-                        !command.trim()
-                      }
-                    >
-                      {sending
-                        ? '...'
-                        : 'Send'}
-                    </button>
-                  </form>
-                )}
+                          <button
+                              type="submit"
+                              disabled={
+                                  sending ||
+                                  !command.trim()
+                              }
+                          >
+                            {sending
+                                ? '...'
+                                : 'Send'}
+                          </button>
+                        </form>
+                    )}
 
-                {isPayload && (
-                  <form
-                    className="composer"
-                    onSubmit={(
-                      e,
-                    ) => {
-                      e.preventDefault()
-                      sendTask()
-                    }}
-                  >
+                    {isPayload && (
+                        <form
+                            className="composer"
+                            onSubmit={(
+                                e,
+                            ) => {
+                              e.preventDefault()
+                              sendTask()
+                            }}
+                        >
                     <span className="prompt">
                       #
                     </span>
 
-                    <input
-                      value={
-                        payloadId
-                      }
-                      onChange={(
-                        e,
-                      ) =>
-                        setPayloadId(
-                          e.target
-                            .value,
-                        )
-                      }
-                      placeholder="payload id..."
-                    />
+                          <input
+                              value={
+                                payloadId
+                              }
+                              onChange={(
+                                  e,
+                              ) =>
+                                  setPayloadId(
+                                      e.target
+                                          .value,
+                                  )
+                              }
+                              placeholder="payload id..."
+                          />
 
-                    <button
-                      type="submit"
-                      disabled={
-                        sending ||
-                        !payloadId.trim()
-                      }
-                    >
-                      {sending
-                        ? '...'
-                        : 'Send'}
-                    </button>
-                  </form>
-                )}
+                          <button
+                              type="submit"
+                              disabled={
+                                  sending ||
+                                  !payloadId.trim()
+                              }
+                          >
+                            {sending
+                                ? '...'
+                                : 'Send'}
+                          </button>
+                        </form>
+                    )}
 
-                {taskType ===
-                  'process' && (
-                  <div className="placeholder-task">
-                    <div>
-                      Enumerates processes
-                      and displays
-                      parent/child
-                      relationships.
-                    </div>
+                    {taskType ===
+                        'process' && (
+                            <div className="placeholder-task">
+                              <div>
+                                Enumerates processes
+                                and displays
+                                parent/child
+                                relationships.
+                              </div>
 
-                    <button
-                      onClick={
-                        sendTask
-                      }
-                      disabled={
-                        sending
-                      }
-                    >
-                      {sending
-                        ? '...'
-                        : 'Get Process Tree'}
-                    </button>
+                              <button
+                                  onClick={
+                                    sendTask
+                                  }
+                                  disabled={
+                                    sending
+                                  }
+                              >
+                                {sending
+                                    ? '...'
+                                    : 'Get Process Tree'}
+                              </button>
+                            </div>
+                        )}
+
+                    {taskType ===
+                        'sleep' && (
+                            <div className="placeholder-task">
+                              <div>
+                                Sleep task
+                              </div>
+
+                              <button
+                                  onClick={
+                                    sendTask
+                                  }
+                                  disabled={
+                                    sending
+                                  }
+                              >
+                                {sending
+                                    ? '...'
+                                    : 'Queue Sleep'}
+                              </button>
+                            </div>
+                        )}
+
+                    {taskType === 'coff_loader' && (
+                        <form
+                            className="composer"
+                            onSubmit={(e) => { e.preventDefault(); sendTask() }}
+                        >
+                          <span className="prompt">#</span>
+                          <input
+                              value={coffUrl}
+                              onChange={(e) => setCoffUrl(e.target.value)}
+                              placeholder="coff object url or id..."
+                          />
+                          <input
+                              value={coffArgs}
+                              onChange={(e) => setCoffArgs(e.target.value)}
+                              placeholder="arg1 arg2 arg3..."
+                          />
+                          <button type="submit" disabled={sending || !coffUrl.trim()}>
+                            {sending ? '...' : 'Send'}
+                          </button>
+                        </form>
+                    )}
                   </div>
-                )}
+                </>
+            )}
+          </section>
+        </main>
 
-                {taskType ===
-                  'sleep' && (
-                  <div className="placeholder-task">
-                    <div>
-                      Sleep task
-                    </div>
-
-                    <button
-                      onClick={
-                        sendTask
-                      }
-                      disabled={
-                        sending
-                      }
-                    >
-                      {sending
-                        ? '...'
-                        : 'Queue Sleep'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </section>
-      </main>
-
-      {toast && (
-        <div className="toast">
-          {toast}
-        </div>
-      )}
-    </div>
+        {toast && (
+            <div className="toast">
+              {toast}
+            </div>
+        )}
+      </div>
   )
 }
