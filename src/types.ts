@@ -1,12 +1,13 @@
+
 export type TaskType =
-  | 'shell'
-  | 'payload'
-  | 'execute_assembly'
-  | 'file_upload'
-  | 'file_download'
-  | 'sleep'
-  | 'process_tree'
-  | 'coff_loader'
+    | 'shell'
+    | 'payload'
+    | 'execute_assembly'
+    | 'file_upload'
+    | 'file_download'
+    | 'sleep'
+    | 'process'
+    | 'coff_loader'
 
 export interface AgentInfo {
   user: string
@@ -32,12 +33,13 @@ export interface Task {
   type: TaskType
   command?: string
   payload_id?: string
+  /** coff_loader only — [url_or_id, arg1, arg2, ...] */
   coff_args?: string[]
 }
 
 export interface ProcessInfo {
-  processId: number
-  parentProcessId: number
+  pid: number
+  ppid: number
   name: string
 }
 

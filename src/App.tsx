@@ -12,6 +12,7 @@ import type {
   ProcessInfo,
   ProcessNode,
   Result,
+  Task,
   TaskType,
 } from './types'
 
@@ -396,7 +397,7 @@ export default function App() {
     setCoffArgs('')
   }
 
-  function buildTask() {
+  function buildTask(): Task | null {
     if (taskType === 'shell') {
       if (!command.trim()) {
         return null
