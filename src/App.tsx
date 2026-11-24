@@ -902,7 +902,7 @@ export default function App() {
 
             <div>
               <div className="brand-title">
-                SENTINEL
+                C2 DASHBOARD
               </div>
 
               <div className="brand-subtitle">
