@@ -1,139 +1,256 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  --bg: #0d1117;
-  --panel: #161b22;
-  --border: #30363d;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #58a6ff;
-  --green: #3fb950;
-  --red: #f85149;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  color: #e2e8f0;
+  background: #080c14;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --bg: #080c14;
+  --surface: #101725;
+  --panel: #131e2e;
+  --panel-light: #19263a;
+  --border: #243247;
+  --border-light: #30435c;
+  --text: #e2e8f0;
+  --muted: #8291a8;
+  --accent: #38bdf8;
+  --cyan: #22d3ee;
+  --green: #34d399;
+  --red: #fb7185;
+  --purple: #a78bfa;
+
+  --shadow-panel: 0 12px 40px rgba(0, 0, 0, 0.25);
+  --radius-panel: 12px;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
-  margin: 0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  min-height: 100vh;
+  background:
+          radial-gradient(
+                  ellipse at 50% -20%,
+                  rgba(56, 189, 248, 0.055),
+                  transparent 55%
+          ),
+          var(--bg);
 }
 
-.app { display: flex; flex-direction: column; height: 100vh; }
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
 
-header {
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.3);
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #304158;
+  border-radius: 20px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #48617f;
+}
+
+/* React Flow graph */
+
+.react-flow {
+  background: #0b1220;
+  border-radius: var(--radius-panel);
+}
+
+.react-flow__background {
+  opacity: 0.55;
+}
+
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: var(--shadow-panel);
+}
+
+.react-flow__controls-button {
+  background: var(--panel) !important;
+  border-bottom: 1px solid var(--border) !important;
+  fill: var(--text) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--panel-light) !important;
+}
+
+.react-flow__minimap {
+  overflow: hidden;
+  background: var(--panel) !important;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__edge-path {
+  stroke: #38516c;
+  stroke-width: 1.8;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-dasharray: 6 5;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border: 2px solid #0b1220;
+}
+
+.react-flow__node {
+  cursor: grab;
+}
+
+.react-flow__node:active {
+  cursor: grabbing;
+}
+
+.react-flow__node.selected {
+  outline: none;
+}
+
+/* Reusable panels */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  gap: 12px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
 }
 
-.brand {
-  font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--accent);
-}
-
-.status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
-.status.on .dot { background: var(--green); }
-
-main { display: flex; flex: 1; min-height: 0; }
-
-aside {
-  width: 300px;
-  border-right: 1px solid var(--border);
-  background: var(--panel);
-  overflow-y: auto;
-  padding: 16px;
-}
-
-aside h2 {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+.muted {
   color: var(--muted);
 }
 
-.agent-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-
-.agent {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: border-color .15s, background .15s;
-}
-.agent:hover { border-color: var(--accent); }
-.agent.active { border-color: var(--accent); background: rgba(88,166,255,.08); }
-
-.agent-top { display: flex; justify-content: space-between; align-items: center; }
-.agent-user { font-weight: 600; font-size: 14px; }
-.agent-id { font-family: monospace; font-size: 11px; color: var(--muted); }
-.agent-meta { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--muted); }
-.agent-meta .lastseen { color: var(--green); }
-
-.empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
-
-.workspace { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.placeholder { flex: 1; display: grid; place-items: center; color: var(--muted); }
-
-.console-head {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 16px; border-bottom: 1px solid var(--border);
-  font-family: monospace;
-}
-.target { color: var(--green); }
-.target-id { color: var(--muted); font-size: 12px; }
-
-.console {
-  flex: 1; overflow-y: auto; padding: 16px;
-  font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px;
+.text-accent {
+  color: var(--accent);
 }
 
-.console-empty { color: var(--muted); }
-
-.entry { margin-bottom: 16px; }
-.cmdline { display: flex; align-items: center; gap: 8px; }
-.cmdline .prompt { color: var(--accent); }
-.cmdline .time { margin-left: auto; color: var(--muted); font-size: 11px; }
-
-.running { margin: 8px 0 0; color: var(--muted); font-style: italic; }
-
-.output {
-  margin: 8px 0 0; padding: 10px 12px;
-  background: #0a0e14; border: 1px solid var(--border); border-radius: 6px;
-  white-space: pre-wrap; word-break: break-word; color: #c9d1d9;
+.text-success {
+  color: var(--green);
 }
 
-.quick { display: flex; gap: 6px; padding: 0 16px 10px; flex-wrap: wrap; }
-.quick button {
-  background: var(--panel); color: var(--muted); border: 1px solid var(--border);
-  border-radius: 4px; padding: 4px 10px; font-family: monospace; font-size: 12px; cursor: pointer;
+.text-danger {
+  color: var(--red);
 }
-.quick button:hover { color: var(--accent); border-color: var(--accent); }
 
-.composer {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; border-top: 1px solid var(--border);
-  font-family: monospace; background: var(--panel);
-}
-.composer .prompt { color: var(--accent); }
-.composer input {
-  flex: 1; background: #0a0e14; border: 1px solid var(--border); border-radius: 6px;
-  color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 14px; outline: none;
-}
-.composer input:focus { border-color: var(--accent); }
-.composer button {
-  background: var(--accent); color: #0d1117; border: none; border-radius: 6px;
-  padding: 8px 16px; font-weight: 600; cursor: pointer; font-family: inherit;
-}
-.composer button:disabled { opacity: .5; cursor: not-allowed; }
+/* Subtle status indicators */
 
-.toast {
-  position: fixed; bottom: 20px; right: 20px;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
-  padding: 10px 16px; font-family: monospace; font-size: 13px;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.45);
+}
+
+.status-dot.offline {
+  background: var(--red);
+}
+
+/* Responsive layout */
+
+@media (max-width: 768px) {
+  .panel-header {
+    padding: 12px;
+  }
+
+  .react-flow__minimap {
+    display: none;
+  }
 }

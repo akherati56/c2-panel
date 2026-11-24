@@ -1,9 +1,52 @@
+import type { ReactNode, ElementType } from 'react'
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
-  useCallback,
 } from 'react'
+
+import {
+  Activity,
+  Bot,
+  Boxes,
+  CheckCircle2,
+  ChevronRight,
+  CircleDot,
+  Clock3,
+  Command,
+  Cpu,
+  GitBranch,
+  LayoutDashboard,
+  ListTodo,
+  Network,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  Terminal,
+  Wifi,
+  WifiOff,
+  X,
+  Zap,
+} from 'lucide-react'
+
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  Handle,
+  MarkerType,
+  MiniMap,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react'
+
+import '@xyflow/react/dist/style.css'
+import './App.css'
 
 import { api } from './api'
 
@@ -16,6 +59,30 @@ import type {
   TaskType,
 } from './types'
 
+// --------------------------------------------------
+// TYPES
+// --------------------------------------------------
+
+type View = 'overview' | 'topology' | 'console' | 'activity'
+
+type GraphNodeData =
+    | {
+  kind: 'server'
+  label: string
+  subtitle: string
+}
+    | {
+  kind: 'agent'
+  agent: Agent
+  active: boolean
+}
+
+type GraphNode = Node<GraphNodeData>
+
+// --------------------------------------------------
+// CONSTANTS
+// --------------------------------------------------
+
 const TASK_TYPES: {
   value: TaskType
   label: string
@@ -27,7 +94,7 @@ const TASK_TYPES: {
   { value: 'file_download', label: 'Download File' },
   { value: 'file_upload', label: 'Upload File' },
   { value: 'sleep', label: 'Sleep' },
-  { value: 'coff_loader', label: 'coff_loader' },
+  { value: 'coff_loader', label: 'COFF Loader' },
 ]
 
 const QUICK = [
@@ -39,18 +106,38 @@ const QUICK = [
   'tasklist',
 ]
 
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
+
 function timeAgo(iso: string): string {
   if (!iso) return '—'
 
-  const s = Math.floor(
-      (Date.now() - new Date(iso).getTime()) / 1000,
+  const timestamp = new Date(iso).getTime()
+
+  if (!Number.isFinite(timestamp)) return '—'
+
+  const seconds = Math.floor(
+      (Date.now() - timestamp) / 1000,
   )
 
-  if (s < 5) return 'now'
-  if (s < 60) return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (seconds < 5) return 'now'
+  if (seconds < 60) return `${seconds}s ago`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
 
-  return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(seconds / 86400)}d ago`
+}
+
+// The API exposes last_seen rather than an explicit online flag.
+// This is a presentation-only status derived from the heartbeat time.
+function isAgentActive(agent: Agent): boolean {
+  const timestamp = new Date(agent.last_seen).getTime()
+
+  return (
+      Number.isFinite(timestamp) &&
+      Date.now() - timestamp < 45000
+  )
 }
 
 function buildProcessTree(
@@ -122,9 +209,7 @@ function parseProcessOutput(
 
           return {
             pid,
-            ppid: Number.isFinite(ppid)
-                ? ppid
-                : 0,
+            ppid: Number.isFinite(ppid) ? ppid : 0,
             name,
           }
         })
@@ -139,15 +224,243 @@ function parseProcessOutput(
   }
 }
 
+// --------------------------------------------------
+// GRAPH NODES
+// --------------------------------------------------
+
+function ServerGraphNode({
+                           data,
+                         }: NodeProps<GraphNode>) {
+  if (data.kind !== 'server') return null
+
+  return (
+      <div className="graph-server">
+        <Handle
+            type="source"
+            position={Position.Right}
+        />
+
+        <div className="server-icon">
+          <Server size={25} />
+        </div>
+
+        <div className="graph-node-title">
+          {data.label}
+        </div>
+
+        <div className="graph-node-subtitle">
+          {data.subtitle}
+        </div>
+
+        <div className="server-status">
+          <span className="status-pulse" />
+          BACKEND
+        </div>
+      </div>
+  )
+}
+
+function AgentGraphNode({
+                          data,
+                          selected,
+                        }: NodeProps<GraphNode>) {
+  if (data.kind !== 'agent') return null
+
+  const { agent, active } = data
+
+  return (
+      <div
+          className={`graph-agent ${active ? 'graph-agent-active' : 'graph-agent-offline'} ${selected ? 'graph-agent-selected' : ''}`}
+      >
+        <Handle
+            type="target"
+            position={Position.Left}
+        />
+
+        <div className="graph-agent-top">
+          <div className="graph-agent-icon">
+            <Bot size={23} />
+          </div>
+
+          <span className={`agent-indicator ${active ? 'active' : 'offline'}`} />
+        </div>
+
+        <div className="graph-agent-name">
+          {agent.info.host || 'Unknown Host'}
+        </div>
+
+        <div className="graph-agent-user">
+          {agent.info.user || 'Unknown User'}
+        </div>
+
+        <div className="graph-agent-divider" />
+
+        <div className="graph-agent-meta">
+          <span>{agent.info.os || 'Unknown OS'}</span>
+          <span>{timeAgo(agent.last_seen)}</span>
+        </div>
+
+        <div className="graph-agent-id">
+          {agent.id.slice(0, 16)}
+        </div>
+      </div>
+  )
+}
+
+const nodeTypes = {
+  server: ServerGraphNode,
+  agent: AgentGraphNode,
+}
+
+// --------------------------------------------------
+// TOPOLOGY
+// --------------------------------------------------
+
+function Topology({
+                    agents,
+                    selected,
+                    onSelect,
+                  }: {
+  agents: Agent[]
+  selected: string | null
+  onSelect: (id: string) => void
+}) {
+  const { nodes, edges } = useMemo(() => {
+    const centerX = 500
+    const centerY = 330
+    const radius = Math.max(
+        300,
+        Math.min(520, agents.length * 75),
+    )
+
+    const graphNodes: GraphNode[] = [
+      {
+        id: 'server',
+        type: 'server',
+        position: {
+          x: centerX,
+          y: centerY,
+        },
+        data: {
+          kind: 'server',
+          label: 'C2 SERVER',
+          subtitle: 'Command Infrastructure',
+        },
+      },
+    ]
+
+    const graphEdges: Edge[] = []
+
+    agents.forEach((agent, index) => {
+      const angle =
+          (2 * Math.PI * index) /
+          Math.max(agents.length, 1) -
+          Math.PI / 2
+
+      const x =
+          centerX + Math.cos(angle) * radius
+
+      const y =
+          centerY + Math.sin(angle) * radius
+
+      const active = isAgentActive(agent)
+
+      graphNodes.push({
+        id: agent.id,
+        type: 'agent',
+        position: { x, y },
+        selected: selected === agent.id,
+        data: {
+          kind: 'agent',
+          agent,
+          active,
+        },
+      })
+
+      graphEdges.push({
+        id: `server-${agent.id}`,
+        source: 'server',
+        target: agent.id,
+        animated: active,
+        type: 'smoothstep',
+        style: {
+          stroke: active ? '#38bdf8' : '#344155',
+          strokeWidth: active ? 2 : 1,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: active ? '#38bdf8' : '#344155',
+        },
+      })
+    })
+
+    return {
+      nodes: graphNodes,
+      edges: graphEdges,
+    }
+  }, [agents, selected])
+
+  return (
+      <div className="topology-canvas">
+        <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            onNodeClick={(_, node) => {
+              if (node.data.kind === 'agent') {
+                onSelect(node.data.agent.id)
+              }
+            }}
+            fitView
+            fitViewOptions={{ padding: 0.25 }}
+            minZoom={0.15}
+            maxZoom={2}
+            nodesDraggable
+            nodesConnectable={false}
+            elementsSelectable
+            proOptions={{ hideAttribution: true }}
+        >
+          <Background
+              variant={BackgroundVariant.Dots}
+              gap={22}
+              size={1}
+              color="#263449"
+          />
+
+          <Controls
+              showInteractive={false}
+          />
+
+          <MiniMap
+              nodeColor={(node) => {
+                if (node.id === 'server') {
+                  return '#38bdf8'
+                }
+
+                const data = node.data as GraphNodeData
+
+                return data.kind === 'agent' && data.active
+                    ? '#34d399'
+                    : '#64748b'
+              }}
+              maskColor="rgba(5,10,20,0.75)"
+          />
+        </ReactFlow>
+      </div>
+  )
+}
+
+// --------------------------------------------------
+// PROCESS TREE
+// --------------------------------------------------
+
 function ProcessTree({
                        nodes,
                      }: {
   nodes: ProcessNode[]
 }) {
   const [expanded, setExpanded] =
-      useState<Set<number>>(
-          () => new Set(),
-      )
+      useState<Set<number>>(() => new Set())
 
   useEffect(() => {
     const initial = new Set<number>()
@@ -176,57 +489,47 @@ function ProcessTree({
   function renderNode(
       node: ProcessNode,
       depth: number,
-  ): React.ReactNode {
-    const hasChildren =
-        node.children.length > 0
-
-    const isExpanded =
-        expanded.has(node.pid)
+  ): ReactNode {
+    const hasChildren = node.children.length > 0
+    const isExpanded = expanded.has(node.pid)
 
     return (
         <div
             key={`${node.pid}-${node.ppid}`}
-            style={{
-              marginLeft: depth * 20,
-            }}
+            className="process-node"
         >
           <div
               className="process-row"
+              style={{ paddingLeft: depth * 22 }}
               onClick={() => {
                 if (hasChildren) {
                   toggle(node.pid)
                 }
               }}
-              style={{
-                cursor: hasChildren
-                    ? 'pointer'
-                    : 'default',
-              }}
           >
-          <span className="process-arrow">
-            {hasChildren
-                ? isExpanded
-                    ? '▼'
-                    : '▶'
-                : '•'}
-          </span>
+                    <span className="process-arrow">
+                        {hasChildren
+                            ? isExpanded
+                                ? '▼'
+                                : '▶'
+                            : '•'}
+                    </span>
+
+            <Cpu size={14} className="process-icon" />
 
             <span className="process-name">
-            {node.name}
-          </span>
+                        {node.name}
+                    </span>
 
             <span className="process-pid">
-            PID {node.pid}
-          </span>
+                        PID {node.pid}
+                    </span>
           </div>
 
           {hasChildren &&
               isExpanded &&
               node.children.map((child) =>
-                  renderNode(
-                      child,
-                      depth + 1,
-                  ),
+                  renderNode(child, depth + 1),
               )}
         </div>
     )
@@ -234,12 +537,58 @@ function ProcessTree({
 
   return (
       <div className="process-tree">
-        {nodes.map((node) =>
-            renderNode(node, 0),
-        )}
+        {nodes.map((node) => renderNode(node, 0))}
       </div>
   )
 }
+
+// --------------------------------------------------
+// STAT CARD
+// --------------------------------------------------
+
+function StatCard({
+                    title,
+                    value,
+                    subtitle,
+                    icon: Icon,
+                    color,
+                  }: {
+  title: string
+  value: string | number
+  subtitle: string
+  icon: ElementType
+  color: string
+}) {
+  return (
+      <div className="stat-card">
+        <div className="stat-card-top">
+          <span>{title}</span>
+
+          <div
+              className="stat-icon"
+              style={{
+                color,
+                background: `${color}16`,
+              }}
+          >
+            <Icon size={19} />
+          </div>
+        </div>
+
+        <div className="stat-value">
+          {value}
+        </div>
+
+        <div className="stat-subtitle">
+          {subtitle}
+        </div>
+      </div>
+  )
+}
+
+// --------------------------------------------------
+// MAIN APPLICATION
+// --------------------------------------------------
 
 export default function App() {
   const [agents, setAgents] =
@@ -260,7 +609,6 @@ export default function App() {
   const [payloadId, setPayloadId] =
       useState('')
 
-  // coff_loader inputs
   const [coffUrl, setCoffUrl] =
       useState('')
 
@@ -276,16 +624,20 @@ export default function App() {
   const [toast, setToast] =
       useState<string | null>(null)
 
+  const [view, setView] =
+      useState<View>('overview')
+
   const consoleRef =
       useRef<HTMLDivElement>(null)
+
+  // ----------------------------------------------
+  // API POLLING - ORIGINAL BEHAVIOR
+  // ----------------------------------------------
 
   const loadAgents = useCallback(
       async () => {
         try {
-          setAgents(
-              await api.agents(),
-          )
-
+          setAgents(await api.agents())
           setOnline(true)
         } catch {
           setOnline(false)
@@ -294,100 +646,76 @@ export default function App() {
       [],
   )
 
-  const loadResults =
-      useCallback(
-          async (id: string | null) => {
-            if (!id) return
+  const loadResults = useCallback(
+      async (id: string | null) => {
+        if (!id) return
 
-            try {
-              setResults(
-                  await api.results(id),
-              )
-            } catch {
-              // ignore polling errors
-            }
-          },
-          [],
-      )
+        try {
+          setResults(await api.results(id))
+        } catch {
+          // Preserve existing polling behavior.
+        }
+      },
+      [],
+  )
 
   useEffect(() => {
     loadAgents()
 
-    const timer =
-        setInterval(
-            loadAgents,
-            3000,
-        )
+    const timer = setInterval(
+        loadAgents,
+        3000,
+    )
 
-    return () =>
-        clearInterval(timer)
+    return () => clearInterval(timer)
   }, [loadAgents])
 
   useEffect(() => {
     loadResults(selected)
 
-    const timer =
-        setInterval(
-            () =>
-                loadResults(selected),
-            3000,
-        )
+    const timer = setInterval(
+        () => loadResults(selected),
+        3000,
+    )
 
-    return () =>
-        clearInterval(timer)
-  }, [
-    selected,
-    loadResults,
-  ])
+    return () => clearInterval(timer)
+  }, [selected, loadResults])
 
   useEffect(() => {
     if (
         selected &&
-        !agents.some(
-            (a) =>
-                a.id === selected,
-        )
+        !agents.some((agent) => agent.id === selected)
     ) {
       setSelected(null)
     }
-  }, [
-    agents,
-    selected,
-  ])
+  }, [agents, selected])
 
-  /*
-   * فقط وقتی کاربر نزدیک انتهای console است
-   * scroll انجام می‌دهیم.
-   */
   useEffect(() => {
-    const el =
-        consoleRef.current
+    const element = consoleRef.current
 
-    if (!el) return
+    if (!element) return
 
     const threshold = 80
 
     const nearBottom =
-        el.scrollHeight -
-        el.scrollTop -
-        el.clientHeight <
+        element.scrollHeight -
+        element.scrollTop -
+        element.clientHeight <
         threshold
 
     if (nearBottom) {
-      el.scrollTop =
-          el.scrollHeight
+      element.scrollTop = element.scrollHeight
     }
   }, [results])
 
-  function showToast(
-      message: string,
-  ) {
+  // ----------------------------------------------
+  // HELPERS
+  // ----------------------------------------------
+
+  function showToast(message: string) {
     setToast(message)
 
-    setTimeout(
-        () => setToast(null),
-        2000,
-    )
+    setTimeout(() => setToast(null), 2500)
   }
 
   function resetInputs() {
@@ -397,55 +725,52 @@ export default function App() {
     setCoffArgs('')
   }
 
+  function selectAgent(id: string) {
+    setSelected(id)
+    setView('console')
+  }
+
+  // ----------------------------------------------
+  // TASK BUILDER - ORIGINAL PAYLOAD STRUCTURES
+  // ----------------------------------------------
+
   function buildTask(): Task | null {
     if (taskType === 'shell') {
-      if (!command.trim()) {
-        return null
-      }
+      if (!command.trim()) return null
 
       return {
-        type: 'shell' as const,
-        command:
-            command.trim(),
+        type: 'shell',
+        command: command.trim(),
       }
     }
 
     if (taskType === 'payload') {
-      if (!payloadId.trim()) {
-        return null
-      }
+      if (!payloadId.trim()) return null
 
       return {
-        type: 'payload' as const,
-        payload_id:
-            payloadId.trim(),
+        type: 'payload',
+        payload_id: payloadId.trim(),
       }
     }
 
-    if (
-        taskType ===
-        'execute_assembly'
-    ) {
-      if (!payloadId.trim()) {
-        return null
-      }
+    if (taskType === 'execute_assembly') {
+      if (!payloadId.trim()) return null
 
       return {
-        type:
-            'execute_assembly' as const,
-        payload_id:
-            payloadId.trim(),
+        type: 'execute_assembly',
+        payload_id: payloadId.trim(),
       }
     }
 
     if (taskType === 'coff_loader') {
       if (!coffUrl.trim()) return null
-      // split on whitespace, keep it simple; use a better parser if args contain spaces
+
       const extra = coffArgs.trim()
           ? coffArgs.trim().split(/\s+/)
           : []
+
       return {
-        type: 'coff_loader' as const,
+        type: 'coff_loader',
         coff_args: [coffUrl.trim(), ...extra],
       }
     }
@@ -454,18 +779,11 @@ export default function App() {
         taskType === 'file_download' ||
         taskType === 'file_upload'
     ) {
-      if (!payloadId.trim()) {
-        return null
-      }
+      if (!payloadId.trim()) return null
 
       return {
-        type:
-            taskType ===
-            'file_download'
-                ? 'file_download'
-                : 'file_upload',
-        payload_id:
-            payloadId.trim(),
+        type: taskType,
+        payload_id: payloadId.trim(),
       }
     }
 
@@ -477,37 +795,34 @@ export default function App() {
   async function sendTask() {
     if (!selected) return
 
-    const task =
-        buildTask()
+    const task = buildTask()
 
     if (!task) {
       showToast(
-          taskType === 'shell' ? 'enter a command'
-              : taskType === 'coff_loader' ? 'enter a coff url and args'
-                  : 'enter a payload id'
+          taskType === 'shell'
+              ? 'Enter a command'
+              : taskType === 'coff_loader'
+                  ? 'Enter a COFF URL and arguments'
+                  : 'Enter a payload ID',
       )
+
       return
     }
 
     setSending(true)
 
     try {
-      await api.queue(
-          selected,
-          task,
-      )
+      await api.queue(selected, task)
 
       resetInputs()
 
+      showToast(`${taskType} task queued`)
+    } catch (error) {
       showToast(
-          `${taskType} task queued`,
-      )
-    } catch (e) {
-      showToast(
-          `error: ${
-              e instanceof Error
-                  ? e.message
-                  : 'unknown'
+          `Error: ${
+              error instanceof Error
+                  ? error.message
+                  : 'Unknown error'
           }`,
       )
     } finally {
@@ -515,437 +830,869 @@ export default function App() {
     }
   }
 
-  const agent =
-      agents.find(
-          (a) =>
-              a.id === selected,
-      )
+  // ----------------------------------------------
+  // DERIVED DATA
+  // ----------------------------------------------
 
-  const isShell =
-      taskType === 'shell'
+  const agent = agents.find(
+      (item) => item.id === selected,
+  )
+
+  const activeAgents = agents.filter(
+      isAgentActive,
+  )
+
+  const isShell = taskType === 'shell'
 
   const isPayload =
       taskType === 'payload' ||
-      taskType ===
-      'execute_assembly' ||
+      taskType === 'execute_assembly' ||
       taskType === 'file_download' ||
       taskType === 'file_upload'
 
+  const pageTitle = {
+    overview: 'Dashboard Overview',
+    topology: 'Agent Topology',
+    console: 'Agent Console',
+    activity: 'Activity Monitor',
+  }[view]
+
+  // ----------------------------------------------
+  // NAVIGATION
+  // ----------------------------------------------
+
+  const navigation = [
+    {
+      id: 'overview' as View,
+      label: 'Overview',
+      icon: LayoutDashboard,
+    },
+    {
+      id: 'topology' as View,
+      label: 'Topology',
+      icon: Network,
+    },
+    {
+      id: 'console' as View,
+      label: 'Console',
+      icon: Terminal,
+    },
+    {
+      id: 'activity' as View,
+      label: 'Activity',
+      icon: Activity,
+    },
+  ]
+
+  // ----------------------------------------------
+  // RENDER
+  // ----------------------------------------------
+
   return (
-      <div className="app">
-        <header>
-          <div className="brand">
-            C2 PANEL
-          </div>
+      <div className="app-shell">
 
-          <div
-              className={`status ${
-                  online
-                      ? 'on'
-                      : 'off'
-              }`}
-          >
-            <span className="dot" />
+        {/* SIDEBAR */}
 
-            {online
-                ? 'connected'
-                : 'disconnected'}
-          </div>
-        </header>
+        <aside className="sidebar">
 
-        <main>
-          <aside>
-            <h2>
-              Agents ({agents.length})
-            </h2>
-
-            <div className="agent-list">
-              {agents.length ===
-                  0 && (
-                      <div className="empty">
-                        no agents registered
-                      </div>
-                  )}
-
-              {agents.map(
-                  (a) => (
-                      <div
-                          key={a.id}
-                          className={`agent ${
-                              a.id ===
-                              selected
-                                  ? 'active'
-                                  : ''
-                          }`}
-                          onClick={() =>
-                              setSelected(
-                                  a.id,
-                              )
-                          }
-                      >
-                        <div className="agent-top">
-                    <span className="agent-user">
-                      {
-                        a
-                            .info
-                            .user
-                      }
-                      @
-                      {
-                        a
-                            .info
-                            .host
-                      }
-                    </span>
-
-                          <span className="agent-id">
-                      {a.id.slice(
-                          0,
-                          8,
-                      )}
-                    </span>
-                        </div>
-
-                        <div className="agent-meta">
-                    <span>
-                      {
-                        a
-                            .info
-                            .os
-                      }
-                    </span>
-
-                          <span className="lastseen">
-                      {timeAgo(
-                          a.last_seen,
-                      )}
-                    </span>
-                        </div>
-                      </div>
-                  ),
-              )}
+          <div className="sidebar-brand">
+            <div className="brand-symbol">
+              <ShieldCheck size={25} />
             </div>
-          </aside>
 
-          <section className="workspace">
-            {!selected ? (
-                <div className="placeholder">
-                  Select an agent to open
-                  its console
+            <div>
+              <div className="brand-title">
+                SENTINEL
+              </div>
+
+              <div className="brand-subtitle">
+                COMMAND PLATFORM
+              </div>
+            </div>
+          </div>
+
+          <div className="sidebar-section-label">
+            WORKSPACE
+          </div>
+
+          <nav className="sidebar-nav">
+            {navigation.map((item) => {
+              const Icon = item.icon
+
+              return (
+                  <button
+                      key={item.id}
+                      className={`nav-item ${view === item.id ? 'nav-active' : ''}`}
+                      onClick={() => setView(item.id)}
+                  >
+                    <Icon size={18} />
+
+                    <span>{item.label}</span>
+
+                    {view === item.id && (
+                        <ChevronRight
+                            size={15}
+                            className="nav-chevron"
+                        />
+                    )}
+                  </button>
+              )
+            })}
+          </nav>
+
+          <div className="sidebar-section-label agents-label">
+            REGISTERED AGENTS
+            <span>{agents.length}</span>
+          </div>
+
+          <div className="sidebar-agent-list">
+            {agents.length === 0 ? (
+                <div className="sidebar-empty">
+                  <Bot size={20} />
+                  <span>No agents registered</span>
                 </div>
             ) : (
-                <>
-                  <div className="console-head">
-                <span className="target">
-                  {
-                    agent?.info
-                        .user
-                  }
-                  @
-                  {
-                    agent?.info
-                        .host
-                  }
-                </span>
+                agents.map((item) => {
+                  const active = isAgentActive(item)
 
-                    <span className="target-id">
-                  {selected}
-                </span>
-                  </div>
-
-                  <div
-                      className="console"
-                      ref={consoleRef}
-                  >
-                    {results.length ===
-                        0 && (
-                            <div className="console-empty">
-                              no results yet —
-                              queue a task below
-                            </div>
-                        )}
-
-                    {results.map(
-                        (r) => {
-                          const tree =
-                              parseProcessOutput(
-                                  r.output,
-                              )
-
-                          const isProcessResult =
-                              taskType ===
-                              'process' ||
-                              r.command ===
-                              'process tree'
-
-                          return (
-                              <div
-                                  key={r.id}
-                                  className="entry"
-                              >
-                                <div className="cmdline">
-                          <span className="prompt">
-                            ›
-                          </span>{' '}
-
-                                  {r.command ||
-                                      '(no command)'}
-
-                                  <span className="time">
-                            {new Date(
-                                r.created_at,
-                            ).toLocaleTimeString()}
-                          </span>
-                                </div>
-
-                                {isProcessResult &&
-                                tree ? (
-                                    <ProcessTree
-                                        nodes={tree}
-                                    />
-                                ) : r.output ? (
-                                    <pre className="output">
-                            {
-                              r.output
-                            }
-                          </pre>
-                                ) : (
-                                    <div className="running">
-                                      executing…
-                                    </div>
-                                )}
-                              </div>
-                          )
-                        },
-                    )}
-                  </div>
-
-              {isShell && (
-                  <div className="quick">
-                    {QUICK.map(
-                        (q) => (
-                            <button
-                                key={q}
-                                onClick={() =>
-                                    setCommand(
-                                        q,
-                                    )
-                                }
-                            >
-                              {q}
-                            </button>
-                        ),
-                    )}
-                  </div>
-              )}
-
-                  <div className="task-panel">
-                    <div className="task-type">
-                      <label>
-                        Task Type
-                      </label>
-
-                      <select
-                          value={
-                            taskType
-                          }
-                          onChange={(
-                              e,
-                          ) => {
-                            setTaskType(
-                                e.target
-                                    .value as TaskType,
-                            )
-
-                            resetInputs()
-                          }}
+                  return (
+                      <button
+                          key={item.id}
+                          className={`sidebar-agent ${selected === item.id ? 'sidebar-agent-selected' : ''}`}
+                          onClick={() => selectAgent(item.id)}
                       >
-                        {TASK_TYPES.map(
-                            (
-                                type,
-                            ) => (
-                                <option
-                                    key={
-                                      type.value
-                                    }
-                                    value={
-                                      type.value
-                                    }
-                                >
-                                  {
-                                    type.label
-                                  }
-                                </option>
-                            ),
-                        )}
-                      </select>
+                        <div className="sidebar-agent-icon">
+                          <MonitorIcon />
+                        </div>
+
+                        <div className="sidebar-agent-info">
+                          <div className="sidebar-agent-name">
+                            {item.info.host}
+                          </div>
+
+                          <div className="sidebar-agent-user">
+                            {item.info.user}
+                          </div>
+                        </div>
+
+                        <span
+                            className={`agent-indicator ${active ? 'active' : 'offline'}`}
+                        />
+                      </button>
+                  )
+                })
+            )}
+          </div>
+
+          <div className="sidebar-bottom">
+            <div className="sidebar-connection">
+              <span className={`connection-dot ${online ? 'connected' : ''}`} />
+
+              <div>
+                <div className="connection-title">
+                  API CONNECTION
+                </div>
+
+                <div className="connection-value">
+                  {online ? 'Connected' : 'Disconnected'}
+                </div>
+              </div>
+
+              {online ? (
+                  <Wifi size={17} className="connection-icon" />
+              ) : (
+                  <WifiOff size={17} className="connection-icon" />
+              )}
+            </div>
+
+            <div className="sidebar-version">
+              SENTINEL UI <span>v1.0.0</span>
+            </div>
+          </div>
+        </aside>
+
+        {/* MAIN */}
+
+        <main className="main-content">
+
+          {/* TOP BAR */}
+
+          <header className="topbar">
+            <div className="topbar-left">
+              <div className="breadcrumb">
+                WORKSPACE
+                <ChevronRight size={14} />
+                <span>{pageTitle}</span>
+              </div>
+
+              <h1>{pageTitle}</h1>
+            </div>
+
+            <div className="topbar-right">
+              <div className="system-status">
+                <span className={`connection-dot ${online ? 'connected' : ''}`} />
+                {online ? 'SYSTEM ONLINE' : 'SYSTEM OFFLINE'}
+              </div>
+
+              <button
+                  className="icon-button"
+                  title="Refresh agents"
+                  onClick={loadAgents}
+              >
+                <RefreshCw size={17} />
+              </button>
+
+              <div className="topbar-avatar">
+                <ShieldCheck size={19} />
+              </div>
+            </div>
+          </header>
+
+          {/* PAGE CONTENT */}
+
+          <div className="page-content">
+
+            {/* OVERVIEW */}
+
+            {view === 'overview' && (
+                <>
+                  <div className="welcome-row">
+                    <div>
+                      <div className="welcome-title">
+                        Infrastructure Overview
+                      </div>
+
+                      <div className="welcome-description">
+                        Monitor registered endpoints and infrastructure status.
+                      </div>
                     </div>
 
-                    {isShell && (
-                        <form
-                            className="composer"
-                            onSubmit={(
-                                e,
-                            ) => {
-                              e.preventDefault()
-                              sendTask()
-                            }}
-                        >
-                    <span className="prompt">
-                      ›
-                    </span>
+                    <div className="live-badge">
+                      <span className="status-pulse" />
+                      LIVE MONITORING
+                    </div>
+                  </div>
 
-                          <input
-                              value={
-                                command
-                              }
-                              onChange={(
-                                  e,
-                              ) =>
-                                  setCommand(
-                                      e.target
-                                          .value,
-                                  )
-                              }
-                              placeholder="command to execute..."
-                          />
+                  <div className="stats-grid">
+                    <StatCard
+                        title="TOTAL AGENTS"
+                        value={agents.length}
+                        subtitle="Registered endpoints"
+                        icon={Bot}
+                        color="#38bdf8"
+                    />
 
+                    <StatCard
+                        title="ACTIVE AGENTS"
+                        value={activeAgents.length}
+                        subtitle="Seen within 45 seconds"
+                        icon={Wifi}
+                        color="#34d399"
+                    />
+
+                    <StatCard
+                        title="OFFLINE AGENTS"
+                        value={agents.length - activeAgents.length}
+                        subtitle="No recent heartbeat"
+                        icon={WifiOff}
+                        color="#fb7185"
+                    />
+
+                    <StatCard
+                        title="TASK RESULTS"
+                        value={results.length}
+                        subtitle="Selected agent results"
+                        icon={ListTodo}
+                        color="#a78bfa"
+                    />
+                  </div>
+
+                  <div className="section-heading">
+                    <div>
+                      <h2>Network Topology</h2>
+                      <p>Visual representation of registered agents</p>
+                    </div>
+
+                    <button
+                        className="text-button"
+                        onClick={() => setView('topology')}
+                    >
+                      Expand Graph
+                      <ChevronRight size={15} />
+                    </button>
+                  </div>
+
+                  <div className="overview-graph-card">
+                    <div className="graph-card-header">
+                      <div className="graph-card-title">
+                        <Network size={17} />
+                        Infrastructure Map
+                      </div>
+
+                      <span className="graph-count">
+                                        {agents.length} ENDPOINTS
+                                    </span>
+                    </div>
+
+                    <Topology
+                        agents={agents}
+                        selected={selected}
+                        onSelect={selectAgent}
+                    />
+                  </div>
+
+                  <div className="section-heading">
+                    <div>
+                      <h2>Registered Endpoints</h2>
+                      <p>Recently seen agents</p>
+                    </div>
+                  </div>
+
+                  <div className="agent-grid">
+                    {agents.slice(0, 6).map((item) => {
+                      const active = isAgentActive(item)
+
+                      return (
                           <button
-                              type="submit"
-                              disabled={
-                                  sending ||
-                                  !command.trim()
-                              }
+                              key={item.id}
+                              className="agent-card"
+                              onClick={() => selectAgent(item.id)}
                           >
-                            {sending
-                                ? '...'
-                                : 'Send'}
-                          </button>
-                        </form>
-                    )}
-
-                    {isPayload && (
-                        <form
-                            className="composer"
-                            onSubmit={(
-                                e,
-                            ) => {
-                              e.preventDefault()
-                              sendTask()
-                            }}
-                        >
-                    <span className="prompt">
-                      #
-                    </span>
-
-                          <input
-                              value={
-                                payloadId
-                              }
-                              onChange={(
-                                  e,
-                              ) =>
-                                  setPayloadId(
-                                      e.target
-                                          .value,
-                                  )
-                              }
-                              placeholder="payload id..."
-                          />
-
-                          <button
-                              type="submit"
-                              disabled={
-                                  sending ||
-                                  !payloadId.trim()
-                              }
-                          >
-                            {sending
-                                ? '...'
-                                : 'Send'}
-                          </button>
-                        </form>
-                    )}
-
-                    {taskType ===
-                        'process' && (
-                            <div className="placeholder-task">
-                              <div>
-                                Enumerates processes
-                                and displays
-                                parent/child
-                                relationships.
+                            <div className="agent-card-header">
+                              <div className="agent-card-icon">
+                                <Bot size={22} />
                               </div>
 
-                              <button
-                                  onClick={
-                                    sendTask
-                                  }
-                                  disabled={
-                                    sending
-                                  }
-                              >
-                                {sending
-                                    ? '...'
-                                    : 'Get Process Tree'}
-                              </button>
+                              <span className={`agent-status-tag ${active ? 'tag-active' : 'tag-offline'}`}>
+                                                    {active ? 'ACTIVE' : 'OFFLINE'}
+                                                </span>
                             </div>
-                        )}
 
-                    {taskType ===
-                        'sleep' && (
-                            <div className="placeholder-task">
-                              <div>
-                                Sleep task
-                              </div>
-
-                              <button
-                                  onClick={
-                                    sendTask
-                                  }
-                                  disabled={
-                                    sending
-                                  }
-                              >
-                                {sending
-                                    ? '...'
-                                    : 'Queue Sleep'}
-                              </button>
+                            <div className="agent-card-host">
+                              {item.info.host}
                             </div>
-                        )}
 
-                    {taskType === 'coff_loader' && (
-                        <form
-                            className="composer"
-                            onSubmit={(e) => { e.preventDefault(); sendTask() }}
-                        >
-                          <span className="prompt">#</span>
-                          <input
-                              value={coffUrl}
-                              onChange={(e) => setCoffUrl(e.target.value)}
-                              placeholder="coff object url or id..."
-                          />
-                          <input
-                              value={coffArgs}
-                              onChange={(e) => setCoffArgs(e.target.value)}
-                              placeholder="arg1 arg2 arg3..."
-                          />
-                          <button type="submit" disabled={sending || !coffUrl.trim()}>
-                            {sending ? '...' : 'Send'}
+                            <div className="agent-card-user">
+                              {item.info.user}
+                            </div>
+
+                            <div className="agent-card-footer">
+                              <span>{item.info.os}</span>
+                              <span>{timeAgo(item.last_seen)}</span>
+                            </div>
                           </button>
-                        </form>
+                      )
+                    })}
+
+                    {agents.length === 0 && (
+                        <div className="empty-panel">
+                          <Bot size={28} />
+                          <p>No registered endpoints yet.</p>
+                        </div>
                     )}
                   </div>
                 </>
             )}
-          </section>
+
+            {/* TOPOLOGY */}
+
+            {view === 'topology' && (
+                <>
+                  <div className="welcome-row">
+                    <div>
+                      <div className="welcome-title">
+                        Agent Network Map
+                      </div>
+
+                      <div className="welcome-description">
+                        Select an endpoint to inspect its details.
+                      </div>
+                    </div>
+
+                    <div className="topology-legend">
+                                    <span>
+                                        <i className="legend-active" />
+                                        Recent heartbeat
+                                    </span>
+
+                      <span>
+                                        <i className="legend-offline" />
+                                        Stale heartbeat
+                                    </span>
+                    </div>
+                  </div>
+
+                  <div className="topology-layout">
+                    <div className="topology-main-card">
+                      <div className="graph-card-header">
+                        <div className="graph-card-title">
+                          <Network size={17} />
+                          Agent Topology
+                        </div>
+
+                        <span className="graph-count">
+                                            {agents.length} NODES
+                                        </span>
+                      </div>
+
+                      <Topology
+                          agents={agents}
+                          selected={selected}
+                          onSelect={setSelected}
+                      />
+                    </div>
+
+                    <div className="agent-detail-card">
+                      <div className="detail-heading">
+                        <span>ENDPOINT DETAILS</span>
+                        <CircleDot size={17} />
+                      </div>
+
+                      {agent ? (
+                          <>
+                            <div className="detail-agent-icon">
+                              <Bot size={30} />
+                            </div>
+
+                            <h3>{agent.info.host}</h3>
+
+                            <span className={`agent-status-tag ${isAgentActive(agent) ? 'tag-active' : 'tag-offline'}`}>
+                                                {isAgentActive(agent) ? 'ACTIVE' : 'OFFLINE'}
+                                            </span>
+
+                            <div className="detail-divider" />
+
+                            <DetailRow label="Username" value={agent.info.user} />
+                            <DetailRow label="Operating System" value={agent.info.os} />
+                            <DetailRow label="Agent ID" value={agent.id} />
+                            <DetailRow label="Last Seen" value={timeAgo(agent.last_seen)} />
+
+                            <button
+                                className="primary-button detail-button"
+                                onClick={() => setView('console')}
+                            >
+                              <Terminal size={16} />
+                              Open Console
+                            </button>
+                          </>
+                      ) : (
+                          <div className="detail-empty">
+                            <Bot size={32} />
+                            <p>Select an agent from the graph.</p>
+                          </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+            )}
+
+            {/* CONSOLE */}
+
+            {view === 'console' && (
+                <>
+                  {!agent ? (
+                      <div className="empty-workspace">
+                        <Terminal size={38} />
+                        <h2>No Agent Selected</h2>
+                        <p>Select an agent from the sidebar to open its console.</p>
+
+                        <button
+                            className="primary-button"
+                            onClick={() => setView('overview')}
+                        >
+                          View Agents
+                        </button>
+                      </div>
+                  ) : (
+                      <>
+                        <div className="console-agent-header">
+                          <div className="console-agent-icon">
+                            <Bot size={25} />
+                          </div>
+
+                          <div className="console-agent-info">
+                            <h2>{agent.info.host}</h2>
+                            <span>
+                                                {agent.info.user} · {agent.info.os}
+                                            </span>
+                          </div>
+
+                          <span className={`agent-status-tag ${isAgentActive(agent) ? 'tag-active' : 'tag-offline'}`}>
+                                            {isAgentActive(agent) ? 'ACTIVE' : 'OFFLINE'}
+                                        </span>
+
+                          <div className="console-agent-id">
+                            {agent.id}
+                          </div>
+                        </div>
+
+                        <div className="console-panel">
+                          <div className="console-panel-header">
+                            <div>
+                              <Terminal size={17} />
+                              COMMAND CONSOLE
+                            </div>
+
+                            <span>
+                                                {results.length} RESULTS
+                                            </span>
+                          </div>
+
+                          <div
+                              className="console-output"
+                              ref={consoleRef}
+                          >
+                            {results.length === 0 && (
+                                <div className="console-empty-state">
+                                  <Command size={30} />
+                                  <p>No results yet.</p>
+                                  <span>Submit a task to view its output here.</span>
+                                </div>
+                            )}
+
+                            {results.map((result) => {
+                              const tree = parseProcessOutput(result.output)
+
+                              const isProcessResult =
+                                  taskType === 'process' ||
+                                  result.command === 'process tree'
+
+                              return (
+                                  <div
+                                      key={result.id}
+                                      className="console-entry"
+                                  >
+                                    <div className="console-command-line">
+                                      <span className="console-prompt">›</span>
+
+                                      <span>
+                                                                {result.command || '(no command)'}
+                                                            </span>
+
+                                      <span className="console-time">
+                                                                {new Date(result.created_at).toLocaleTimeString()}
+                                                            </span>
+                                    </div>
+
+                                    {isProcessResult && tree ? (
+                                        <ProcessTree nodes={tree} />
+                                    ) : result.output ? (
+                                        <pre className="console-result">
+                                                                {result.output}
+                                                            </pre>
+                                    ) : (
+                                        <div className="console-running">
+                                          <span className="status-pulse" />
+                                          Waiting for result...
+                                        </div>
+                                    )}
+                                  </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* QUICK COMMANDS */}
+
+                        {isShell && (
+                            <div className="quick-commands">
+                              <span>QUICK COMMANDS</span>
+
+                              {QUICK.map((item) => (
+                                  <button
+                                      key={item}
+                                      onClick={() => setCommand(item)}
+                                  >
+                                    {item}
+                                  </button>
+                              ))}
+                            </div>
+                        )}
+
+                        {/* TASK COMPOSER */}
+
+                        <div className="task-panel">
+                          <div className="task-panel-heading">
+                            <div>
+                              <Zap size={18} />
+                              TASK COMPOSER
+                            </div>
+
+                            <span>
+                                                TARGET: {agent.info.host}
+                                            </span>
+                          </div>
+
+                          <div className="task-type-selector">
+                            <label>Task Type</label>
+
+                            <select
+                                value={taskType}
+                                onChange={(event) => {
+                                  setTaskType(event.target.value as TaskType)
+                                  resetInputs()
+                                }}
+                            >
+                              {TASK_TYPES.map((item) => (
+                                  <option
+                                      key={item.value}
+                                      value={item.value}
+                                  >
+                                    {item.label}
+                                  </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {isShell && (
+                              <form
+                                  className="task-composer"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    sendTask()
+                                  }}
+                              >
+                                <span className="composer-prefix">›</span>
+
+                                <input
+                                    value={command}
+                                    onChange={(event) => setCommand(event.target.value)}
+                                    placeholder="Enter command..."
+                                />
+
+                                <button
+                                    type="submit"
+                                    disabled={sending || !command.trim()}
+                                    className="primary-button"
+                                >
+                                  {sending ? 'Sending...' : 'Submit'}
+                                </button>
+                              </form>
+                          )}
+
+                          {isPayload && (
+                              <form
+                                  className="task-composer"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    sendTask()
+                                  }}
+                              >
+                                <span className="composer-prefix">#</span>
+
+                                <input
+                                    value={payloadId}
+                                    onChange={(event) => setPayloadId(event.target.value)}
+                                    placeholder="Enter payload ID..."
+                                />
+
+                                <button
+                                    type="submit"
+                                    disabled={sending || !payloadId.trim()}
+                                    className="primary-button"
+                                >
+                                  {sending ? 'Sending...' : 'Submit'}
+                                </button>
+                              </form>
+                          )}
+
+                          {taskType === 'coff_loader' && (
+                              <form
+                                  className="task-composer coff-composer"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    sendTask()
+                                  }}
+                              >
+                                <input
+                                    value={coffUrl}
+                                    onChange={(event) => setCoffUrl(event.target.value)}
+                                    placeholder="COFF object URL or ID..."
+                                />
+
+                                <input
+                                    value={coffArgs}
+                                    onChange={(event) => setCoffArgs(event.target.value)}
+                                    placeholder="Arguments..."
+                                />
+
+                                <button
+                                    type="submit"
+                                    disabled={sending || !coffUrl.trim()}
+                                    className="primary-button"
+                                >
+                                  {sending ? 'Sending...' : 'Submit'}
+                                </button>
+                              </form>
+                          )}
+
+                          {(taskType === 'process' || taskType === 'sleep') && (
+                              <div className="task-action-row">
+                                <div>
+                                  {taskType === 'process' ? (
+                                      <>
+                                        <GitBranch size={18} />
+                                        Process Tree
+                                      </>
+                                  ) : (
+                                      <>
+                                        <Clock3 size={18} />
+                                        Sleep Task
+                                      </>
+                                  )}
+                                </div>
+
+                                <button
+                                    className="primary-button"
+                                    disabled={sending}
+                                    onClick={sendTask}
+                                >
+                                  {sending
+                                      ? 'Sending...'
+                                      : taskType === 'process'
+                                          ? 'Get Process Tree'
+                                          : 'Queue Sleep'}
+                                </button>
+                              </div>
+                          )}
+                        </div>
+                      </>
+                  )}
+                </>
+            )}
+
+            {/* ACTIVITY */}
+
+            {view === 'activity' && (
+                <>
+                  <div className="welcome-row">
+                    <div>
+                      <div className="welcome-title">
+                        Activity Monitor
+                      </div>
+
+                      <div className="welcome-description">
+                        Recent results for the selected agent.
+                      </div>
+                    </div>
+
+                    {agent && (
+                        <div className="live-badge">
+                          {agent.info.host}
+                        </div>
+                    )}
+                  </div>
+
+                  {!selected ? (
+                      <div className="empty-workspace">
+                        <Activity size={38} />
+                        <h2>Select an Agent</h2>
+                        <p>Select an agent to view its activity.</p>
+                      </div>
+                  ) : (
+                      <div className="activity-card">
+                        <div className="activity-header">
+                          <div>
+                            <Activity size={18} />
+                            RECENT RESULTS
+                          </div>
+
+                          <span>{results.length} RECORDS</span>
+                        </div>
+
+                        {results.length === 0 ? (
+                            <div className="empty-panel">
+                              No activity records available.
+                            </div>
+                        ) : (
+                            <div className="activity-list">
+                              {results.map((result) => (
+                                  <div
+                                      key={result.id}
+                                      className="activity-item"
+                                  >
+                                    <div className="activity-item-icon">
+                                      <CheckCircle2 size={18} />
+                                    </div>
+
+                                    <div className="activity-item-content">
+                                      <strong>
+                                        {result.command || 'Task result'}
+                                      </strong>
+
+                                      <span>
+                                                            Agent: {result.agent_id.slice(0, 16)}
+                                                        </span>
+                                    </div>
+
+                                    <time>
+                                      {new Date(result.created_at).toLocaleString()}
+                                    </time>
+
+                                    <button
+                                        className="icon-button small"
+                                        onClick={() => setView('console')}
+                                        title="Open console"
+                                    >
+                                      <ChevronRight size={17} />
+                                    </button>
+                                  </div>
+                              ))}
+                            </div>
+                        )}
+                      </div>
+                  )}
+                </>
+            )}
+          </div>
+
+          <footer className="app-footer">
+                    <span>
+                        <ShieldCheck size={14} />
+                        SENTINEL COMMAND PLATFORM
+                    </span>
+
+            <span>
+                        API POLLING: 3000MS
+                    </span>
+          </footer>
         </main>
+
+        {/* TOAST */}
 
         {toast && (
             <div className="toast">
+              <CheckCircle2 size={18} />
               {toast}
+
+              <button onClick={() => setToast(null)}>
+                <X size={15} />
+              </button>
             </div>
         )}
+      </div>
+  )
+}
+
+// --------------------------------------------------
+// SMALL COMPONENTS
+// --------------------------------------------------
+
+function MonitorIcon() {
+  return <Boxes size={19} />
+}
+
+function DetailRow({
+                     label,
+                     value,
+                   }: {
+  label: string
+  value: string
+}) {
+  return (
+      <div className="detail-row">
+        <span>{label}</span>
+        <strong title={value}>{value || '—'}</strong>
       </div>
   )
 }

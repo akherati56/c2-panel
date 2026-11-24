@@ -13,12 +13,14 @@ export interface AgentInfo {
   user: string
   host: string
   os: string
+  ip?: string
 }
 
 export interface Agent {
   id: string
   info: AgentInfo
   last_seen: string
+  ip?: string
 }
 
 export interface Result {
