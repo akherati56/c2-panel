@@ -596,10 +596,6 @@
   filter: drop-shadow(0 0 4px rgba(56,189,248,0.3));
 }
 
-.topology-canvas .react-flow__attribution {
-  display: none;
-}
-
 /* ================================================
    CUSTOM GRAPH NODES
 ================================================ */
@@ -1761,5 +1757,372 @@
   .app-footer {
     padding: 0 12px;
     font-size: 7px;
+  }
+}
+
+
+
+/* ================================================
+   COFF MANAGEMENT
+================================================ */
+
+.coff-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 37px;
+  padding: 0 13px;
+  color: #a8bbd0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 650;
+  transition: 0.2s;
+}
+
+.secondary-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.secondary-button:disabled {
+  opacity: 0.45;
+}
+
+.coff-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 8px 0 24px;
+}
+
+.coff-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 88px;
+  padding: 17px;
+  background: linear-gradient(145deg, #131e2e, #101725);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.coff-stat-icon {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: rgba(56,189,248,0.1);
+  border: 1px solid rgba(56,189,248,0.13);
+  border-radius: 9px;
+}
+
+.coff-stat-card > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.coff-stat-card span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+}
+
+.coff-stat-card strong {
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.coff-stat-card .coff-status-online {
+  color: var(--green);
+  font-size: 15px;
+}
+
+.coff-stat-card .coff-status-offline {
+  color: #fbbf24;
+  font-size: 15px;
+}
+
+.coff-library-card {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+
+.coff-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 18px;
+  background: #111b2a;
+  border-bottom: 1px solid var(--border);
+}
+
+.coff-library-header h2 {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.coff-library-header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.coff-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(260px, 45%);
+  min-height: 36px;
+  padding: 0 11px;
+  color: #718096;
+  background: #0b1320;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.coff-search:focus-within {
+  border-color: var(--accent);
+}
+
+.coff-search input {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 11px;
+}
+
+.coff-file-list-heading,
+.coff-file-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) 90px minmax(130px, 1fr) 160px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+}
+
+.coff-file-list-heading {
+  color: #718096;
+  background: rgba(7,14,24,0.45);
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.9px;
+}
+
+.coff-file-row {
+  min-height: 74px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.coff-file-row:last-child {
+  border-bottom: 0;
+}
+
+.coff-file-row:hover {
+  background: rgba(56,189,248,0.035);
+}
+
+.coff-file-name {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.coff-file-icon {
+  width: 37px;
+  height: 37px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: rgba(56,189,248,0.09);
+  border: 1px solid rgba(56,189,248,0.14);
+  border-radius: 8px;
+}
+
+.coff-file-name > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.coff-file-name strong {
+  overflow: hidden;
+  color: #e2e8f0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.coff-file-name span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.coff-file-size {
+  color: #a8bbd0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.coff-file-id {
+  overflow: hidden;
+  color: #718096;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
+.coff-file-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.coff-file-actions a {
+  text-decoration: none;
+}
+
+.coff-use-button {
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.coff-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  padding: 30px 20px;
+  text-align: center;
+  color: #64748b;
+}
+
+.coff-empty-state > svg {
+  color: #38bdf8;
+  opacity: 0.75;
+}
+
+.coff-empty-state h3 {
+  margin: 15px 0 6px;
+  color: #dbeafe;
+  font-size: 14px;
+}
+
+.coff-empty-state p {
+  margin: 0 0 17px;
+  font-size: 10px;
+}
+
+.coff-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 15px;
+  padding: 13px 15px;
+  color: #91a4bb;
+  background: rgba(56,189,248,0.045);
+  border: 1px solid rgba(56,189,248,0.13);
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.coff-info-note svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.coff-info-note strong {
+  color: #cbd5e1;
+}
+
+@media (max-width: 1000px) {
+  .coff-file-list-heading,
+  .coff-file-row {
+    grid-template-columns: minmax(160px, 1.4fr) 75px minmax(110px, 1fr) 145px;
+    gap: 9px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+@media (max-width: 750px) {
+  .coff-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coff-file-list-heading {
+    display: none;
+  }
+
+  .coff-file-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .coff-file-size {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .coff-file-id {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .coff-file-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 650px) {
+  .coff-toolbar-actions {
+    width: 100%;
+  }
+
+  .coff-toolbar-actions button {
+    flex: 1;
+  }
+
+  .coff-library-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .coff-search {
+    width: 100%;
   }
 }

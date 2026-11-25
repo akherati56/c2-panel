@@ -48,3 +48,10 @@ export interface ProcessInfo {
 export interface ProcessNode extends ProcessInfo {
   children: ProcessNode[]
 }
+
+
+export interface FileInfo {
+  id: string;
+  name: string;
+  size: number;
+}
